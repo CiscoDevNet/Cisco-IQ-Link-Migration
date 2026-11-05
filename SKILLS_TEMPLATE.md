@@ -3,7 +3,7 @@ name: skill-name-in-kebab-case
 description: >
   Describes the exact Cisco workflow this skill supports and the concrete
   requests that should activate it.
-license: Apache-2.0
+license: Cisco Sample Code License, Version 1.1
 compatibility: "Claude Code, GitHub Copilot, OpenAI Codex, Cursor, Gemini CLI"
 metadata:
   product: replace-with-product-folder
