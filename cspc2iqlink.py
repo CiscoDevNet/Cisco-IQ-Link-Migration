@@ -284,21 +284,13 @@ def convert_csv(input_file, output_dir=None, auto_approve=False):
     if hasattr(os, 'umask'):
         old_umask = os.umask(0o077)
     try:
-        """
-        Converts a CSPC ManagedDevicesCredentials.csv file to IQ Link format.
-
-        Args:
-            input_file: Path to the CSPC CSV file.
-            output_dir: Optional directory to save output files. Defaults to input file directory.
-
-        Returns:
-            dict: Paths of generated CSV files {'credentials': path, 'hosts': path}
-        """
         if not os.path.isfile(input_file):
             raise FileNotFoundError(f"Input file not found: {input_file}")
 
+        # Logic to target the User's Downloads folder
         if output_dir is None:
-            output_dir = os.path.dirname(os.path.abspath(input_file))
+            user_home = Path.home()
+            output_dir = user_home / "Downloads"
         os.makedirs(output_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -339,8 +331,10 @@ def convert_csv(input_file, output_dir=None, auto_approve=False):
                     'https': 'cspc_HTTPS_cred'
                 }
                 prefix = prefix_map.get(proto, f"cspc_{proto}_cred")
+                time_only = timestamp.split('_')[-1]
+                name = f"imported_{proto}_{counters[proto]}_{time_only}"
                 groups[proto][creds_tuple] = {
-                    "name": f"{prefix}_{counters[proto]}",
+                    "name": name,
                     'hosts': set()
                 }
                 counters[proto] += 1

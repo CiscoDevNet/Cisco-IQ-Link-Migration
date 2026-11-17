@@ -419,12 +419,18 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
         unique_hosts = set()
         discovery_ranges = set()
         topology_configs = []
-        dnac_ips = set()
+        dnac_map = {}
         found_range = False
 
         def add_to_group(proto, creds, ips):
             if creds not in groups[proto]:
-                groups[proto][creds] = {"name": f"cxagent_{proto.upper()}_cred_{counters[proto]}", "hosts": set()}
+                # Extract only the 6-digit time (HHMMSS) from the full timestamp
+                # The timestamp format is YYYYMMDD_HHMMSS, so we split by '_'
+                time_only = timestamp.split('_')[-1]
+                
+                # Updated naming convention: imported_{protocol}_{counter}_{time_only}
+                name = f"imported_{proto}_{counters[proto]}_{time_only}"
+                groups[proto][creds] = {"name": name, "hosts": set()}
                 counters[proto] += 1
             groups[proto][creds]["hosts"].update(ips)
 
@@ -460,11 +466,6 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
             if not ips:
                 continue
 
-            # Collect DNAC IPs
-            if device.get("category") == "DNAC":
-                for ip in ips:
-                    dnac_ips.add(ip)
-
             for ip in ips:
                 if is_ip_range(ip):
                     found_range = True
@@ -494,10 +495,19 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
                 ), ips)
             if "https" in cmap:
                 https = cmap["https"]
-                add_to_group('https', (https.get("user"), https.get("password")), ips)
+                creds = (https.get("user"), https.get("password"))
+                add_to_group('https', creds, ips)
+
+                if device.get("category") == "DNAC":
+                    # Retrieve the name we just generated/assigned
+                    gen_name = groups['https'][creds]['name']
+                    for ip in ips:
+                        dnac_map[ip] = gen_name
+                        
             if "http" in cmap:
                 http = cmap["http"]
                 add_to_group('http', (http.get("user"), http.get("password")), ips)
+
 
         # S&TO / CSDL Acknowledgment Gate
         dev_count = len(device_list) if device_list else len(unique_hosts) if unique_hosts else None
@@ -678,14 +688,14 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
 
                 range_from, range_to = rng.split('-', 1)
                 row = [
-                    "IP_RANGE",          # Type
-                    rng,                 # Name
-                    cron,                # Recurring Schedule (from schedule CSV, normalized)
-                    range_from.strip(),  # IP Range From
-                    range_to.strip(),    # IP Range To
-                    "",                  # Topology Protocols
-                    "",                  # Topology Hop Count
-                    ""                   # Topology Seed IPs
+                    "IP_RANGE",            # Type
+                    f"{rng} (imported)",   # Name
+                    cron,                  # Recurring Schedule (from schedule CSV, normalized)
+                    range_from.strip(),    # IP Range From
+                    range_to.strip(),      # IP Range To
+                    "",                    # Topology Protocols
+                    "",                    # Topology Hop Count
+                    ""                     # Topology Seed IPs
                 ]
                 discovery_rows.append(row)
                 matched += 1
@@ -695,7 +705,8 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
             # "AutoDiscovery", so we look that up for the cron value.
             for topo in topology_configs:
                 cron = schedule_map.get("AutoDiscovery", "")
-                name = topo["protocols"] if topo["protocols"] else "Topology_Discovery"
+                base_name = topo["protocols"] if topo["protocols"] else "Topology_Discovery"
+                name = f"{base_name} (imported)"  # <--- Append (imported) here
 
                 row = [
                     "TOPOLOGY_DISCOVERY",              # Type
@@ -736,13 +747,25 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
             print("\n[NOTE]: CDP/LLDP discovery job found, please configure this in IQ Link using the following path:")
             print("        System Settings -> Connection Management -> Network Scan")
 
-        # Independent check: Catalyst Center (DNAC) IPs must be added manually.
-        if dnac_ips:
-            print("\n[NOTE]: The following Catalyst Center IP address(es) were found in the seed file:")
-            for ip in sorted(dnac_ips):
-                print(f"        - {ip}")
-            print("        Please configure this in IQ Link using the following path:")
-            print("        System Settings -> Connection Management -> Catalyst Center")
+        # Independent check: Catalyst Center IPs must be added manually.
+        if dnac_map:
+            print(f"\n{CYAN}[!]{RESET} {WHITE}Catalyst Center configurations found:{RESET}")
+            for ip, cred_name in sorted(dnac_map.items()):
+                print(f"      IP Address      : {ip}")
+                print(f"      Credential Name : {cred_name}")
+            
+            print(f"\n{YELLOW}Next Steps:{RESET}")
+            print("  1. Import the IQ_Link_Credentials_Import CSV file first.")
+            print("  2. Navigate to: System Settings -> Connection Management -> Catalyst Center")
+            print("  3. Add the IP address and assign the corresponding Credential Name listed above.")
+
+            # Acknowledgment Gate
+            print()
+            try:
+                input(f"{CYAN}[*] Please acknowledge that you have noted these manual steps. Press [Enter] to continue...{RESET}")
+            except (EOFError, KeyboardInterrupt):
+                write_fail("Process interrupted by user.")
+                return results
 
         for p_out in (output_creds, results.get('hosts'), results.get('discoveries')):
             if p_out and os.path.exists(p_out) and os.name == 'posix':
