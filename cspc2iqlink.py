@@ -332,7 +332,7 @@ def convert_csv(input_file, output_dir=None, auto_approve=False):
                 }
                 prefix = prefix_map.get(proto, f"cspc_{proto}_cred")
                 time_only = timestamp.split('_')[-1]
-                name = f"imported_{proto}_{counters[proto]}_{time_only}"
+                name = f"{proto}_{counters[proto]}_{time_only} (imported)"
                 groups[proto][creds_tuple] = {
                     "name": name,
                     'hosts': set()

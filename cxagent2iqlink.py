@@ -429,7 +429,7 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
                 time_only = timestamp.split('_')[-1]
                 
                 # Updated naming convention: imported_{protocol}_{counter}_{time_only}
-                name = f"imported_{proto}_{counters[proto]}_{time_only}"
+                name = f"{proto}_{counters[proto]}_{time_only} (imported)"
                 groups[proto][creds] = {"name": name, "hosts": set()}
                 counters[proto] += 1
             groups[proto][creds]["hosts"].update(ips)
@@ -503,7 +503,7 @@ def convert_json_to_csv(input_json, schedule_csv=None, output_dir=None, timestam
                     gen_name = groups['https'][creds]['name']
                     for ip in ips:
                         dnac_map[ip] = gen_name
-                        
+
             if "http" in cmap:
                 http = cmap["http"]
                 add_to_group('http', (http.get("user"), http.get("password")), ips)
